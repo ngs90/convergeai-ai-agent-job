@@ -4,9 +4,12 @@ import streamlit as st
 import pdfplumber
 import docx
 import re
-import asyncio 
+import asyncio
 import nest_asyncio
-from crawler import Crawler
+from job_crawler.crawler import Crawler
+
+# Monkey patch Streamlit's internal event loop
+nest_asyncio.apply()
 
 def extract_text_from_pdf(pdf_file):
     """
@@ -94,50 +97,46 @@ def process_keywords(keywords_input):
     ]
     return keywords
 
-# Apply nest_asyncio to allow nested event loops
-nest_asyncio.apply()
 
-def run_async_crawler(keywords):
-    async def async_crawl():
-        # Create crawler instance
-        crawler = Crawler()
-        
-        try:
-            # Update progress bar
-            my_bar = st.progress(0, text="Finding new relevant jobs. Please wait.")
-            
-            # Run crawl method
-            job_links, raw_markdown = await crawler.crawl(keywords=keywords)
-            
-            # Update progress bar
-            my_bar.progress(20, text="Extracting job ads and metadata. Please wait.")
-            
-            # Process job ads
-            documents, metadatas = crawler.process_job_ad()
-            
-            # Update progress bar
-            my_bar.progress(60, text="Making ready to analyze")
-            
-            # Store in ChromaDB
-            crawler.store_in_chroma()
-            
-            # Update progress bar
-            my_bar.progress(80, text="Finding most relevant jobs.")
-            
-            # Get jobs
-            jobs = get_jobs(keywords, n_results=6)
-            
-            # Update progress bar
-            my_bar.progress(100, text="Ready.")
-            
-            return jobs
-        
-        except Exception as e:
-            st.error(f"An error occurred during crawling: {e}")
-            return []
 
-    # Use asyncio.run with the async function
-    return asyncio.run(async_crawl())
+async def run_async_crawler(keywords):
+    # Create crawler instance
+    crawler = Crawler()
+    
+    # try:
+    if True:
+        # Update progress bar
+        my_bar = st.progress(0, text="Finding new relevant jobs. Please wait.")
+        
+        # Run crawl method
+        job_links, raw_markdown = await crawler.crawl(keywords=keywords)
+        
+        # Update progress bar
+        my_bar.progress(20, text="Extracting job ads and metadata. Please wait.")
+        
+        # Process job ads
+        documents, metadatas = crawler.process_job_ad()
+        
+        # Update progress bar
+        my_bar.progress(60, text="Making ready to analyze. Please wait.")
+        
+        # Store in ChromaDB
+        crawler.store_in_chroma()
+        
+        # Update progress bar
+        my_bar.progress(80, text="Finding most relevant jobs. Please wait.")
+        
+        # Get jobs
+        jobs = get_jobs(keywords, n_results=6)
+        
+        # Update progress bar
+        my_bar.progress(100, text="Ready.")
+        
+        return jobs
+    
+    # except Exception as e:
+    #     st.error(f"An error occurred during crawling: {e}")
+    #     return []
 
 
 def main():
@@ -214,7 +213,8 @@ def main():
 
     # In your Streamlit code
     if st.session_state.job_keywords:
-        jobs = run_async_crawler(st.session_state.job_keywords)
+        loop = asyncio.get_event_loop()
+        jobs = loop.run_until_complete(run_async_crawler(st.session_state.job_keywords))
         st.text_area("Job ads:", str(jobs), height=300)
 
 
